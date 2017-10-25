@@ -1,0 +1,107 @@
+<?php
+
+error_reporting(E_ALL);
+ini_set('display_errors', TRUE);
+ini_set('display_startup_errors', TRUE);
+
+
+function deleteform_menu() {
+	$items = array();
+	$item['delete-contents'] = array(
+		'title' => 'CONTENT DELETE',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('deleteform_form'),
+		'access arguments' => array('access content'),
+		'description' => 'to delete the contents',
+		'type' => MENU_CALLBACK,
+	);
+
+  /*$item['example/ajaxform'] = array(
+    'title' => 'My form',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('my_form'),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );*/
+
+  return $item;
+}
+
+function deleteform_form($form, &$form_state) {
+  $content_types = node_type_get_names();
+  //dpm($content_types);
+  $nodes = node_load_multiple(array(), array('type' => 'sample'));
+  //dpm($nodes);
+
+  $form['select content type'] = array (
+    '#type' => 'select',
+    '#title' => t('select content type'),
+    '#required'=>TRUE,
+    '#options' => $content_types,
+    //'#description' => "Please select the content type.",
+      '#ajax' => array (
+        'callback' => 'hello_me',
+        'wrapper' => 'form-item-select-content-type',
+        'method' => 'replace',
+        'effect' => 'fade',
+    ),
+  );
+  $form['submit'] = array ( 
+    '#type'  => 'submit',
+    '#value' => 'Submit',
+  );
+
+  return $form;
+}
+
+/*
+ * call back function.
+ */
+/*function ajax_node_list_down() {
+
+  $content_types = node_type_get_names();
+
+  $form['name'] = array(
+    '#type' => 'select',
+    '#title' => t('Name'),
+    '#prefix' => '<div id="my-name">',
+    '#required' => TRUE,
+    '#options' => $content_types,
+    '#ajax' => array(
+      'callback' => 'hello_me',
+      'wrapper' => 'my-name',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+    '#suffix' => '</div>',
+  );
+  return $form;
+}
+*/
+/**
+ * ajax Call back function.
+ */
+function hello_me($form, &$form_state) {
+  $content_types = $form_state['input']['select_content_type'];
+  $nodes = node_load_multiple(array(), array('type' => $content_types));
+  foreach ($nodes as $key => $values) {
+    $titles[] = $values->title;
+  }
+  foreach ($titles as $key => $value) {
+
+    $data ='Nodes selected fot the content type '  . $content_types . ' are ' .  $value;
+  //ddl($data);
+  }
+
+  /*theme('table', $header, $rows); 
+    $header = array('Title');
+    $rows = array();
+
+    $results = $titles;
+
+  $data = theme('table', array('header' => $header, 'rows' => $rows));*/
+
+ return $form['name'] = $data;
+}
+
+
