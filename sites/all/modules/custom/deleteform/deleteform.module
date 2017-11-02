@@ -4,7 +4,9 @@ error_reporting(E_ALL);
 ini_set('display_errors', TRUE);
 ini_set('display_startup_errors', TRUE);
 
-
+/**
+ * page creation.
+ */
 function deleteform_menu() {
 	$items = array();
 	$item['delete-contents'] = array(
@@ -13,95 +15,145 @@ function deleteform_menu() {
 		'page arguments' => array('deleteform_form'),
 		'access arguments' => array('access content'),
 		'description' => 'to delete the contents',
-		'type' => MENU_CALLBACK,
-	);
-
-  /*$item['example/ajaxform'] = array(
-    'title' => 'My form',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('my_form'),
-    'access callback' => TRUE,
     'type' => MENU_CALLBACK,
-  );*/
-
+  );
   return $item;
 }
 
-function deleteform_form($form, &$form_state) {
-  $content_types = node_type_get_names();
-  //dpm($content_types);
-  $nodes = node_load_multiple(array(), array('type' => 'sample'));
-  //dpm($nodes);
+/**
+ * module form structure.
+ */
 
-  $form['select content type'] = array (
+function deleteform_form($form, &$form_state) {
+  form_load_include($form_state, 'inc', 'node', 'node.admin');
+  $content_types = node_type_get_names();
+  $nodes = node_load_multiple(array(), array('type' => 'sample'));
+  $form['select_content_type'] = array (
     '#type' => 'select',
     '#title' => t('select content type'),
     '#required'=>TRUE,
     '#options' => $content_types,
-    //'#description' => "Please select the content type.",
+    '#description' => "Please select the content type.",
       '#ajax' => array (
-        'callback' => 'hello_me',
-        'wrapper' => 'form-item-select-content-type',
+        'callback' => 'delete_tableselect',
+        'wrapper' => 'delete-form-wrapper',
         'method' => 'replace',
         'effect' => 'fade',
     ),
   );
-  $form['submit'] = array ( 
-    '#type'  => 'submit',
-    '#value' => 'Submit',
+
+  $form['options'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Update options'),
+    '#attributes' => array('class' => array('container-inline')),
   );
+  $options = array();
+  foreach (module_invoke_all('node_operations') as $operation => $array) {
+    $options[$operation] = $array['label'];
 
-  return $form;
-}
-
-/*
- * call back function.
- */
-/*function ajax_node_list_down() {
-
-  $content_types = node_type_get_names();
-
-  $form['name'] = array(
+  }
+  $form['options']['operation'] = array(
     '#type' => 'select',
-    '#title' => t('Name'),
-    '#prefix' => '<div id="my-name">',
-    '#required' => TRUE,
-    '#options' => $content_types,
-    '#ajax' => array(
-      'callback' => 'hello_me',
-      'wrapper' => 'my-name',
-      'method' => 'replace',
-      'effect' => 'fade',
-    ),
-    '#suffix' => '</div>',
+    '#title' => t('Operation'),
+    '#title_display' => 'invisible',
+    '#options' => $options,
+    '#default_value' => 'approve',
   );
+
+  $form['options']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Update'),
+    '#submit' => array('deleteform_submit'),
+  );
+  if (!empty($content_types)) {
+    $header = array(
+      'title' => array('data' => t('Title'), 'field' => 'n.title'),
+      'type' => array('data' => t('Type'), 'field' => 'n.type'),
+      'author' => t('Author'),
+      'status' => array('data' => t('Status'), 'field' => 'n.status'),
+      'changed' => array('data' => t('Updated'), 'field' => 'n.changed', 'sort' => 'desc')
+      );
+    $options = array();
+    $form['nodes'] = array(
+      '#type' => 'tableselect',
+      '#header' => $header,
+      '#options' => $options,
+      '#empty' => t('No content available.'),
+      '#multiple' => TRUE,
+      '#prefix' => '<div id ="delete-form-wrapper">', 
+      '#suffix' => '</div>',
+    );
+  } 
+
   return $form;
 }
-*/
+
 /**
- * ajax Call back function.
+ * ajax Call back function-table with checkbox.
  */
-function hello_me($form, &$form_state) {
+function delete_tableselect($form,&$form_state) {
+  $header = array(
+    'title' => array('data' => t('Title'), 'field' => 'n.title'),
+    'type' => array('data' => t('Type'), 'field' => 'n.type'),
+    'author' => t('Author'),
+    'status' => array('data' => t('Status'), 'field' => 'n.status'),
+    'changed' => array('data' => t('Updated'), 'field' => 'n.changed', 'sort' => 'desc')
+  );
   $content_types = $form_state['input']['select_content_type'];
-  $nodes = node_load_multiple(array(), array('type' => $content_types));
-  foreach ($nodes as $key => $values) {
-    $titles[] = $values->title;
+  $query = db_select('node','n');
+  $query->addTag('node_admin_filter');
+  node_build_filter_query($query);
+  $nids = $query->fields('n',array('nid'))
+      ->condition('n.type', $content_types)
+      ->execute()
+      ->fetchCol();
+  $nodes = node_load_multiple($nids);
+  $languages = language_list();
+  $destination = drupal_get_destination();
+  $options = array();
+  foreach ($nodes as $key => $node) {
+    $titles[] = $node->title;
+    $langcode = entity_language('node', $node);
+    $uri = entity_uri('node', $node);
+    if ($langcode != LANGUAGE_NONE && isset($languages[$langcode])) {
+      $uri['options']['language'] = $languages[$langcode];
+    }
+    $options[$node->nid] = array(
+      'title' => array(
+        'data' => array(
+          '#type' => 'link',
+          '#title' => $node->title,
+          '#href' => $uri['path'],
+          '#options' => $uri['options'],
+          '#suffix' => ' ' . theme('mark', array('type' => node_mark($node->nid, $node->changed))),
+        ),
+      ),
+      'type' => check_plain(node_type_get_name($node)),
+      'author' => theme('username', array('account' => $node)),
+      'status' => $node->status ? t('published') : t('not published'),
+      'changed' => format_date($node->changed,'short'),
+    );
   }
-  foreach ($titles as $key => $value) {
-
-    $data ='Nodes selected fot the content type '  . $content_types . ' are ' .  $value;
-  //ddl($data);
-  }
-
-  /*theme('table', $header, $rows); 
-    $header = array('Title');
-    $rows = array();
-
-    $results = $titles;
-
-  $data = theme('table', array('header' => $header, 'rows' => $rows));*/
-
- return $form['name'] = $data;
+  $form['nodes']['#type'] = 'tableselect';
+  $form['nodes']['#header'] = $header;
+  $form['nodes']['#options'] = $options;
+  $form['nodes'] = form_process_tableselect($form['nodes']);
+  return $form['nodes'];
 }
 
+function deleteform_submit($form, &$form_state) {
+  dpm($form);
+  $update_options = $form_state['values']['operation'];
+  if (!isset($update_options)) {
+    form_set_error('select any update option');
+  }
 
+  if ($update_options = 'delete') {
+    $data_deleted = db_delete('node')
+      ->condition('nid','8')
+      ->execute();
+  }
+  if ($update_options = 'unpublish') {
+     $data_unpublish = node_unpublish_action($form_state);
+     dpm($update_options);
+}

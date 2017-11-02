@@ -439,6 +439,7 @@ function node_admin_nodes() {
     '#attributes' => array('class' => array('container-inline')),
     '#access' => $admin_access,
   );
+
   $options = array();
   foreach (module_invoke_all('node_operations') as $operation => $array) {
     $options[$operation] = $array['label'];
